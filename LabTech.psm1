@@ -97,7 +97,7 @@ IF([Net.SecurityProtocolType]::Tls13) {[Net.ServicePointManager]::SecurityProtoc
 
 #region [Functions]-------------------------------------------------------------
 
-Function Get-LTServiceInfo{ 
+Function Get-LTServiceInfo{
 <#
 .SYNOPSIS
     This function will pull all of the registry data into an object.
@@ -126,7 +126,7 @@ Function Get-LTServiceInfo{
 
 .LINK
     http://labtechconsulting.com
-#> 
+#>
     [CmdletBinding(SupportsShouldProcess=$True, ConfirmImpact='Low')]
     Param ()
 
@@ -182,7 +182,7 @@ Function Get-LTServiceInfo{
     }#End End
 }#End Function Get-LTServiceInfo
 
-Function Get-LTServiceSettings{ 
+Function Get-LTServiceSettings{
 <#
 .SYNOPSIS
     This function will pull the registry data from HKLM:\SOFTWARE\LabTech\Service\Settings into an object.
@@ -348,7 +348,7 @@ Function Stop-LTService{
                 ('LTService','LTSvcMon') | Foreach-Object {
                     Try {$Null=& "$env:windir\system32\sc.exe" stop "$($_)" 2>''}
                     Catch {Write-Output "Error calling sc.exe."}
-                } 
+                }
                 $timeout = new-timespan -Minutes 1
                 $sw = [diagnostics.stopwatch]::StartNew()
                 Write-Host -NoNewline "Waiting for Services to Stop."
@@ -426,7 +426,7 @@ Function Start-LTService{
 
     Begin{
         Write-Debug "Starting $($myInvocation.InvocationName) at line $(LINENUM)"
-        #Identify processes that are using the tray port 
+        #Identify processes that are using the tray port
         [array]$processes = @()
         $Port = (Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False|Select-Object -Expand TrayPort -EA 0)
         if (-not ($Port)) {$Port = "42000"}
@@ -535,6 +535,9 @@ Function Uninstall-LTService{
 .PARAMETER Backup
     This will run a 'New-LTServiceBackup' before uninstalling.
 
+.PARAMETER Authorization
+    HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
+
 .PARAMETER Force
     This will force operation on an agent detected as a probe.
 
@@ -546,8 +549,12 @@ Function Uninstall-LTService{
     Uninstall-LTService -Server 'https://lt.domain.com'
     This will uninstall the LabTech agent using the provided server URL to download the uninstallers.
 
+.EXAMPLE
+    Uninstall-LTService -Authorization "Bearer SecretKeyHere"
+    This will uninstall the LabTech agent using the server address in the registry using a bearer authorization header.
+
 .NOTES
-    Version:        1.8
+    Version:        1.9
     Author:         Chris Taylor
     Website:        labtechconsulting.com
     Creation Date:  3/14/2016
@@ -581,9 +588,12 @@ Function Uninstall-LTService{
     Update Date: 1/21/2019
     Purpose/Change: Minor bugfixes/adjustments.
     Allow single label server name.
-    
+
     Update Date: 2/28/2019
     Purpose/Change: Update to try both http and https method if not specified for Server
+
+    Update Date: 06/09/2020
+    Purpose/Change: Add Authorization paramater to include an HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
 
 .LINK
     http://labtechconsulting.com
@@ -595,6 +605,8 @@ Function Uninstall-LTService{
         [string[]]$Server,
         [Parameter(ValueFromPipelineByPropertyName = $true)]
         [switch]$Backup,
+        [Parameter(ValueFromPipelineByPropertyName = $true)]
+        [string]$Authorization,
         [switch]$Force
     )
 
@@ -705,6 +717,9 @@ Function Uninstall-LTService{
                         }#End If
                         $installerTest.KeepAlive=$False
                         $installerTest.ProtocolVersion = '1.0'
+                        if ($Authorization) {
+                            $installerTest.Headers['Authorization'] = $Authorization
+                        }
                         $installerResult = $installerTest.GetResponse()
                         $installerTest.Abort()
                         If ($installerResult.StatusCode -ne 200) {
@@ -714,6 +729,9 @@ Function Uninstall-LTService{
                         Else {
                             If ($PSCmdlet.ShouldProcess("$installer", "DownloadFile")) {
                                 Write-Debug "Line $(LINENUM): Downloading Agent_Install.msi from $installer"
+                                if ($Authorization) {
+                                    $Script:LTServiceNetWebClient.Headers['Authorization'] = $Authorization
+                                }
                                 $Script:LTServiceNetWebClient.DownloadFile($installer,"$env:windir\temp\LabTech\Installer\Agent_Install.msi")
                                 If ((Test-Path "$env:windir\temp\LabTech\Installer\Agent_Install.msi")) {
                                     If (!((Get-Item "$env:windir\temp\LabTech\Installer\Agent_Install.msi" -EA 0).length/1KB -gt 1234)) {
@@ -742,6 +760,9 @@ Function Uninstall-LTService{
                         }#End If
                         $uninstallerTest.KeepAlive=$False
                         $uninstallerTest.ProtocolVersion = '1.0'
+                        if ($Authorization) {
+                            $uninstallerTest.Headers['Authorization'] = $Authorization
+                        }
                         $uninstallerResult = $uninstallerTest.GetResponse()
                         $uninstallerTest.Abort()
                         If ($uninstallerResult.StatusCode -ne 200) {
@@ -751,6 +772,9 @@ Function Uninstall-LTService{
                             #Download Agent_Uninstall.exe
                             If ($PSCmdlet.ShouldProcess("$uninstaller", "DownloadFile")) {
                                 Write-Debug "Line $(LINENUM): Downloading Agent_Uninstall.exe from $uninstaller"
+                                if ($Authorization) {
+                                    $Script:LTServiceNetWebClient.Headers['Authorization'] = $Authorization
+                                }
                                 $Script:LTServiceNetWebClient.DownloadFile($uninstaller,"$($env:windir)\temp\Agent_Uninstall.exe")
                                 If ((Test-Path "$($env:windir)\temp\Agent_Uninstall.exe") -and !((Get-Item "$($env:windir)\temp\Agent_Uninstall.exe" -EA 0).length/1KB -gt 80)) {
                                     Write-Warning "WARNING: Line $(LINENUM): Agent_Uninstall.exe size is below normal. Removing suspected corrupt file."
@@ -805,7 +829,7 @@ Function Uninstall-LTService{
                     If ($PSCmdlet.ShouldProcess("$($BasePath)\wodVPN.dll", "Unregister DLL")) {
                         #Unregister DLL
                         Write-Debug "Line $(LINENUM): Executing Command ""regsvr32.exe /u $($BasePath)\wodVPN.dll /s"""
-                        Try {& "$env:windir\system32\regsvr32.exe" /u "$($BasePath)\wodVPN.dll" /s 2>''} 
+                        Try {& "$env:windir\system32\regsvr32.exe" /u "$($BasePath)\wodVPN.dll" /s 2>''}
                         Catch {Write-Output "Error calling regsvr32.exe."}
                     }#End If
                 }#End If
@@ -840,7 +864,7 @@ Function Uninstall-LTService{
                     If (Get-Service $_ -EA 0) {
                         If ( $PSCmdlet.ShouldProcess("$($_)","Remove Service") ) {
                             Write-Debug "Line $(LINENUM): Removing Service: $($_)"
-                            Try {& "$env:windir\system32\sc.exe" delete "$($_)" 2>''} 
+                            Try {& "$env:windir\system32\sc.exe" delete "$($_)" 2>''}
                             Catch {Write-Output "Error calling sc.exe."}
                         }#End If
                     }#End If
@@ -936,6 +960,9 @@ Function Install-LTService{
 .PARAMETER SkipDotNet
     This will disable the error checking for the .NET 3.5 and .NET 2.0 frameworks during the install process.
 
+.PARAMETER Authorization
+    HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
+
 .PARAMETER Force
     This will disable some of the error checking on the install process.
 
@@ -947,8 +974,12 @@ Function Install-LTService{
     Install-LTService -Server https://lt.domain.com -Password sQWZzEDYKFFnTT0yP56vgA== -LocationID 42
     This will install the LabTech agent using the provided Server URL, Password, and LocationID.
 
+.EXAMPLE
+    Redo-LTService -Server https://lt.domain.com -LocationID 42 -Authorization "Bearer SecretKeyHere"
+    This will install the LabTech agent using the server address in the registry using a bearer authorization header.
+
 .NOTES
-    Version:        2.0
+    Version:        2.1
     Author:         Chris Taylor
     Website:        labtechconsulting.com
     Creation Date:  3/14/2016
@@ -996,6 +1027,9 @@ Function Install-LTService{
     Update Date: 12/28/2019
     Purpose/Change: Handle .NET 3.5 in pending state, accept .NET 4.0+ or higher with -Force parameter
 
+    Update Date: 06/09/2020
+    Purpose/Change: Add Authorization paramater to include an HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
+
 .LINK
     http://labtechconsulting.com
 #>
@@ -1018,6 +1052,8 @@ Function Install-LTService{
         [string]$Rename,
         [switch]$Hide,
         [switch]$SkipDotNet,
+        [Parameter(ValueFromPipelineByPropertyName = $true)]
+        [string]$Authorization,
         [switch]$Force,
         [switch]$NoWait
     )
@@ -1148,6 +1184,9 @@ Function Install-LTService{
                         }#End If
                         $installerTest.KeepAlive=$False
                         $installerTest.ProtocolVersion = '1.0'
+                        if ($Authorization) {
+                            $installerTest.Headers['Authorization'] = $Authorization
+                        }
                         $installerResult = $installerTest.GetResponse()
                         $installerTest.Abort()
                         If ($installerResult.StatusCode -ne 200) {
@@ -1156,6 +1195,9 @@ Function Install-LTService{
                         } Else {
                             If ( $PSCmdlet.ShouldProcess($installer, "DownloadFile") ) {
                                 Write-Debug "Line $(LINENUM): Downloading Agent_Install.msi from $installer"
+                                if ($Authorization) {
+                                    $Script:LTServiceNetWebClient.Headers['Authorization'] = $Authorization
+                                }
                                 $Script:LTServiceNetWebClient.DownloadFile($installer,"$env:windir\temp\LabTech\Installer\Agent_Install.msi")
                                 If((Test-Path "$env:windir\temp\LabTech\Installer\Agent_Install.msi") -and  !((Get-Item "$env:windir\temp\LabTech\Installer\Agent_Install.msi" -EA 0).length/1KB -gt 1234)) {
                                     Write-Warning "WARNING: Line $(LINENUM): Agent_Install.msi size is below normal. Removing suspected corrupt file."
@@ -1370,6 +1412,9 @@ Function Redo-LTService{
 .PARAMETER SkipDotNet
     This will disable the error checking for the .NET 3.5 and .NET 2.0 frameworks during the install process.
 
+.PARAMETER Authorization
+    HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
+
 .PARAMETER Force
     This will force operation on an agent detected as a probe.
 
@@ -1380,6 +1425,10 @@ Function Redo-LTService{
 .EXAMPLE
     Redo-LTService -Server https://lt.domain.com -Password sQWZzEDYKFFnTT0yP56vgA== -LocationID 42
     This will ReInstall the LabTech agent using the provided server URL to download the installation files.
+
+.EXAMPLE
+    Redo-LTService -Authorization "Bearer SecretKeyHere"
+    This will ReInstall the LabTech agent using the server address in the registry using a bearer authorization header.
 
 .NOTES
     Version:        1.5
@@ -1408,9 +1457,12 @@ Function Redo-LTService{
     Update Date: 2/22/2019
     Purpose/Change: Added -SkipDotNet parameter.
     Allows for skipping of .NET 3.5 and 2.0 framework checks for installing on OS with .NET 4.0+ already installed
+
+    Update Date: 06/09/2020
+    Purpose/Change: Add Authorization paramater to include an HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
 .LINK
     http://labtechconsulting.com
-#> 
+#>
     [CmdletBinding(SupportsShouldProcess=$True)]
     Param(
         [Parameter(ValueFromPipelineByPropertyName = $True, ValueFromPipeline=$True)]
@@ -1429,6 +1481,8 @@ Function Redo-LTService{
         [AllowNull()]
         [string]$Rename,
         [switch]$SkipDotNet,
+        [Parameter(ValueFromPipelineByPropertyName = $true)]
+        [string]$Authorization,
         [switch]$Force
     )
 
@@ -1506,7 +1560,7 @@ Function Redo-LTService{
         Write-Output "Reinstalling LabTech with the following information, -Server $($ServerList -join ',') $PasswordArg -LocationID $LocationID $RenameArg"
         Write-Verbose "Starting: Uninstall-LTService -Server $($ServerList -join ',')"
         Try{
-            Uninstall-LTService -Server $ServerList -ErrorAction Stop -Force
+            Uninstall-LTService -Server $ServerList -ErrorAction Stop -Authorization:$Authorization -Force
         }#End Try
 
         Catch{
@@ -1522,7 +1576,7 @@ Function Redo-LTService{
 
         Write-Verbose "Starting: Install-LTService -Server $($ServerList -join ',') $PasswordArg -LocationID $LocationID -Hide:`$$($Hide) $RenameArg"
         Try{
-            Install-LTService -Server $ServerList -ServerPassword $ServerPassword -LocationID $LocationID -Hide:$Hide -Rename $Rename -SkipDotNet:$SkipDotNet -Force
+            Install-LTService -Server $ServerList -ServerPassword $ServerPassword -LocationID $LocationID -Hide:$Hide -Rename $Rename -SkipDotNet:$SkipDotNet -Authorization:$Authorization -Force
         }#End Try
 
         Catch{
@@ -1739,7 +1793,7 @@ Function Update-LTService{
                         Push-Location $updaterPath
                         & "$updaterPath\LabtechUpdate.exe" $($xarg) 2>''
                         Pop-Location
-                    } 
+                    }
                     Catch {Write-Output "Error calling LabtechUpdate.exe."}
                     Start-Sleep -Seconds 5
                 } Else {
@@ -1752,7 +1806,7 @@ Function Update-LTService{
                     #Extract Update Files
                     Write-Verbose "Launching Labtech Updater"
                     Write-Debug "Line $(LINENUM): Executing Command ""Update.exe $($uarg)"""
-                    Try {& "$updaterPath\Update.exe" $($uarg) 2>''} 
+                    Try {& "$updaterPath\Update.exe" $($uarg) 2>''}
                     Catch {Write-Output "Error calling Update.exe."}
                     Start-Sleep -Seconds 5
                 } Else {
@@ -1995,7 +2049,7 @@ Function Reset-LTService{
                 $timeout = New-Timespan -Minutes 1
                 $sw = [diagnostics.stopwatch]::StartNew()
                 $LTSI=Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False
-                Write-Host -NoNewline "Waiting for agent to register." 
+                Write-Host -NoNewline "Waiting for agent to register."
                 While (!($LTSI|Select-Object -Expand ID -EA 0) -or !($LTSI|Select-Object -Expand LocationID -EA 0) -or !($LTSI|Select-Object -Expand MAC -EA 0) -and $($sw.elapsed) -lt $timeout){
                     Write-Host -NoNewline '.'
                     Start-Sleep 2
@@ -3282,13 +3336,13 @@ Function Set-LTProxy{
     Process{
 
         If (
-(($ResetProxy -eq $True) -and (($DetectProxy -eq $True) -or ($ProxyServerURL) -or ($ProxyUsername) -or ($ProxyPassword) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword))) -or 
-(($DetectProxy -eq $True) -and (($ResetProxy -eq $True) -or ($ProxyServerURL) -or ($ProxyUsername) -or ($ProxyPassword) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword))) -or 
-((($ProxyServerURL) -or ($ProxyUsername) -or ($ProxyPassword) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword)) -and (($ResetProxy -eq $True) -or ($DetectProxy -eq $True))) -or 
-((($ProxyUsername) -or ($ProxyPassword)) -and (-not ($ProxyServerURL) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword) -or ($ResetProxy -eq $True) -or ($DetectProxy -eq $True))) -or 
+(($ResetProxy -eq $True) -and (($DetectProxy -eq $True) -or ($ProxyServerURL) -or ($ProxyUsername) -or ($ProxyPassword) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword))) -or
+(($DetectProxy -eq $True) -and (($ResetProxy -eq $True) -or ($ProxyServerURL) -or ($ProxyUsername) -or ($ProxyPassword) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword))) -or
+((($ProxyServerURL) -or ($ProxyUsername) -or ($ProxyPassword) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword)) -and (($ResetProxy -eq $True) -or ($DetectProxy -eq $True))) -or
+((($ProxyUsername) -or ($ProxyPassword)) -and (-not ($ProxyServerURL) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword) -or ($ResetProxy -eq $True) -or ($DetectProxy -eq $True))) -or
 ((($EncodedProxyUsername) -or ($EncodedProxyPassword)) -and (-not ($ProxyServerURL) -or ($ProxyUsername) -or ($ProxyPassword) -or ($ResetProxy -eq $True) -or ($DetectProxy -eq $True)))
         ) {Write-Error "ERROR: Line $(LINENUM): Set-LTProxy: Invalid Parameter specified" -ErrorAction Stop}
-        If (-not (($ResetProxy -eq $True) -or ($DetectProxy -eq $True) -or ($ProxyServerURL) -or ($ProxyUsername) -or ($ProxyPassword) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword))) 
+        If (-not (($ResetProxy -eq $True) -or ($DetectProxy -eq $True) -or ($ProxyServerURL) -or ($ProxyUsername) -or ($ProxyPassword) -or ($EncodedProxyUsername) -or ($EncodedProxyPassword)))
         {
             If ($Args.Count -gt 0) {Write-Error "ERROR: Line $(LINENUM): Set-LTProxy: Unknown Parameter specified" -ErrorAction Stop}
             Else {Write-Error "ERROR: Line $(LINENUM): Set-LTProxy: Required Parameters Missing" -ErrorAction Stop}
@@ -3423,7 +3477,7 @@ Function Set-LTProxy{
                     $Svr=$($Script:LTProxy.ProxyServerURL); If (($Svr -ne '') -and ($Svr -notmatch 'https?://')) {$Svr = "http://$($Svr)"}
                     @{"ProxyServerURL"=$Svr;
                     "ProxyUserName"="$(ConvertTo-LTSecurity -InputString "$($Script:LTProxy.ProxyUserName)" -Key "$($Script:LTServiceKeys.PasswordString)")";
-                    "ProxyPassword"="$(ConvertTo-LTSecurity -InputString "$($Script:LTProxy.ProxyPassword)" -Key "$($Script:LTServiceKeys.PasswordString)")"}.GetEnumerator() | Foreach-Object { 
+                    "ProxyPassword"="$(ConvertTo-LTSecurity -InputString "$($Script:LTProxy.ProxyPassword)" -Key "$($Script:LTServiceKeys.PasswordString)")"}.GetEnumerator() | Foreach-Object {
                         Write-Debug "Line $(LINENUM): Setting Registry value for $($_.Name) to `"$($_.Value)`""
                         Set-ItemProperty -Path 'HKLM:Software\LabTech\Service\Settings' -Name $($_.Name) -Value $($_.Value) -EA 0 -Confirm:$False
                     }#End Foreach-Object
@@ -3616,7 +3670,7 @@ If (($MyInvocation.Line -match 'Import-Module' -or $MyInvocation.MyCommand -matc
 <#
 'Just a small code block to use when developing new features to ensure new functions are not missed.
 'Here just so that I don't need to track it down when I want it. - DJW
-    $UnPublicFunctions=(Get-Content 'Script Source' | Select-String -Pattern '(?<=^function )[-\w]+' -AllMatches | Select-Object -expand matches) | ForEach-Object {if ($PublicFunctions -notcontains $_.value) {$_.value}}; 
+    $UnPublicFunctions=(Get-Content 'Script Source' | Select-String -Pattern '(?<=^function )[-\w]+' -AllMatches | Select-Object -expand matches) | ForEach-Object {if ($PublicFunctions -notcontains $_.value) {$_.value}};
     if ($UnPublicFunctions) {Write-Debug "Not publishing functions: $(($UnPublicFunctions) -join ',')"}
 #>
 }
