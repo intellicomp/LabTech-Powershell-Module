@@ -535,8 +535,20 @@ Function Uninstall-LTService{
 .PARAMETER Backup
     This will run a 'New-LTServiceBackup' before uninstalling.
 
-.PARAMETER Authorization
+.PARAMETER Authentication
     HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
+
+    Available Authentication Options:
+        None: This is the default option when Authentication isn't supplied; no explicit authentication is used.
+        Basic: Requires Credential. The credentials are sent in an RFC 7617 Basic Authentication header in the format of base64(user:password).
+        Bearer: Requires Token. Sends an RFC 6750 Authorization: Bearer header with the supplied token. This is an alias for OAuth
+        OAuth: Requires Token. Sends an RFC 6750 Authorization: Bearer header with the supplied token. This is an alias for Bearer
+
+.PARAMETER Credential
+    Username and password required by the server for basic authentication in order to download the agent installer or uninstaller.
+
+.PARAMETER Token
+    Bearer/OAuth token required by the server in order to download the agent installer or uninstaller.
 
 .PARAMETER Force
     This will force operation on an agent detected as a probe.
@@ -550,7 +562,7 @@ Function Uninstall-LTService{
     This will uninstall the LabTech agent using the provided server URL to download the uninstallers.
 
 .EXAMPLE
-    Uninstall-LTService -Authorization "Bearer SecretKeyHere"
+    Uninstall-LTService -Authorization "Bearer" -Token 'TokenHere'
     This will uninstall the LabTech agent using the server address in the registry using a bearer authorization header.
 
 .NOTES
@@ -595,6 +607,9 @@ Function Uninstall-LTService{
     Update Date: 06/09/2020
     Purpose/Change: Add Authorization paramater to include an HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
 
+    Update Date: 06/13/2020
+    Purpose:Change: Enable both Bearer/OAuth and Basic authentication.
+
 .LINK
     http://labtechconsulting.com
 #>
@@ -605,8 +620,11 @@ Function Uninstall-LTService{
         [string[]]$Server,
         [Parameter(ValueFromPipelineByPropertyName = $true)]
         [switch]$Backup,
-        [Parameter(ValueFromPipelineByPropertyName = $true)]
-        [string]$Authorization,
+        [Parameter()]
+        [ValidateSet('None','Basic','Bearer','OAuth')]
+        [string]$Authentication = 'None',
+        [string]$Token,
+        [pscredential]$Credential,
         [switch]$Force
     )
 
@@ -717,8 +735,23 @@ Function Uninstall-LTService{
                         }#End If
                         $installerTest.KeepAlive=$False
                         $installerTest.ProtocolVersion = '1.0'
-                        if ($Authorization) {
-                            $installerTest.Headers['Authorization'] = $Authorization
+                        if ($Authentication -eq 'Bearer' -or $Authentication -eq 'OAuth') {
+                            if ($Token) {
+                                $installerTest.Headers['Authorization'] = "Bearer $Token"
+                                Write-Verbose "Set Authorization to [$Authentication $Token]."
+                            } else {
+                                Write-Error "ERROR: Line $(LINENUM): Bearer or OAuth specified for Authentication and Token not set."
+                                Throw
+                            }
+                        } elseif ($Authentication -eq 'Basic') {
+                            if ($Credential) {
+                                $Base64Credential = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Credential.Username + ":" + $Credential.GetNetworkCredential().Password));
+                                $installerTest.Headers['Authorization'] = "Basic $Base64Credential"
+                                Write-Verbose "Set Authorization to [$Authentication $Base64Credential]."
+                            } else {
+                                Write-Error "ERROR: Line $(LINENUM): Basic specified for Authentication and Credential not set."
+                                Throw
+                            }
                         }
                         $installerResult = $installerTest.GetResponse()
                         $installerTest.Abort()
@@ -729,8 +762,25 @@ Function Uninstall-LTService{
                         Else {
                             If ($PSCmdlet.ShouldProcess("$installer", "DownloadFile")) {
                                 Write-Debug "Line $(LINENUM): Downloading Agent_Install.msi from $installer"
-                                if ($Authorization) {
-                                    $Script:LTServiceNetWebClient.Headers['Authorization'] = $Authorization
+                                if ($Authentication -eq 'Bearer' -or $Authentication -eq 'OAuth') {
+                                    if ($Token) {
+                                        $Script:LTServiceNetWebClient.Headers['Authorization'] = "Bearer $Token"
+                                        Write-Verbose "Set Authorization to [$Authentication $Token]."
+                                    }
+                                    else {
+                                        Write-Error "ERROR: Line $(LINENUM): Bearer or OAuth specified for Authentication and Token not set."
+                                        Throw
+                                    }
+                                }
+                                elseif ($Authentication -eq 'Basic') {
+                                    if ($Credential) {
+                                        $Base64Credential = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Credential.Username + ":" + $Credential.GetNetworkCredential().Password));
+                                        $Script:LTServiceNetWebClient.Headers['Authorization'] = "Basic $Base64Credential"
+                                        Write-Verbose "Set Authorization to [$Authentication $Base64Credential]."
+                                    } else {
+                                        Write-Error "ERROR: Line $(LINENUM): Basic specified for Authentication and Credential not set."
+                                        Throw
+                                    }
                                 }
                                 $Script:LTServiceNetWebClient.DownloadFile($installer,"$env:windir\temp\LabTech\Installer\Agent_Install.msi")
                                 If ((Test-Path "$env:windir\temp\LabTech\Installer\Agent_Install.msi")) {
@@ -760,8 +810,23 @@ Function Uninstall-LTService{
                         }#End If
                         $uninstallerTest.KeepAlive=$False
                         $uninstallerTest.ProtocolVersion = '1.0'
-                        if ($Authorization) {
-                            $uninstallerTest.Headers['Authorization'] = $Authorization
+                        if ($Authentication -eq 'Bearer' -or $Authentication -eq 'OAuth') {
+                            if ($Token) {
+                                $uninstallerTest.Headers['Authorization'] = "Bearer $Token"
+                                Write-Verbose "Set Authorization to [$Authentication $Token]."
+                            } else {
+                                Write-Error "ERROR: Line $(LINENUM): Bearer or OAuth specified for Authentication and Token not set."
+                                Throw
+                            }
+                        } elseif ($Authentication -eq 'Basic') {
+                            if ($Credential) {
+                                $Base64Credential = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Credential.Username + ":" + $Credential.GetNetworkCredential().Password));
+                                $uninstallerTest.Headers['Authorization'] = "Basic $Base64Credential"
+                                Write-Verbose "Set Authorization to [$Authentication $Base64Credential]."
+                            } else {
+                                Write-Error "ERROR: Line $(LINENUM): Basic specified for Authentication and Credential not set."
+                                Throw
+                            }
                         }
                         $uninstallerResult = $uninstallerTest.GetResponse()
                         $uninstallerTest.Abort()
@@ -772,8 +837,25 @@ Function Uninstall-LTService{
                             #Download Agent_Uninstall.exe
                             If ($PSCmdlet.ShouldProcess("$uninstaller", "DownloadFile")) {
                                 Write-Debug "Line $(LINENUM): Downloading Agent_Uninstall.exe from $uninstaller"
-                                if ($Authorization) {
-                                    $Script:LTServiceNetWebClient.Headers['Authorization'] = $Authorization
+                                if ($Authentication -eq 'Bearer' -or $Authentication -eq 'OAuth') {
+                                    if ($Token) {
+                                        $Script:LTServiceNetWebClient.Headers['Authorization'] = "Bearer $Token"
+                                        Write-Verbose "Set Authorization to [$Authentication $Token]."
+                                    }
+                                    else {
+                                        Write-Error "ERROR: Line $(LINENUM): Bearer or OAuth specified for Authentication and Token not set."
+                                        Throw
+                                    }
+                                }
+                                elseif ($Authentication -eq 'Basic') {
+                                    if ($Credential) {
+                                        $Base64Credential = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Credential.Username + ":" + $Credential.GetNetworkCredential().Password));
+                                        $Script:LTServiceNetWebClient.Headers['Authorization']= "Basic $Base64Credential"
+                                        Write-Verbose "Set Authorization to [$Authentication $Base64Credential]."
+                                    } else {
+                                        Write-Error "ERROR: Line $(LINENUM): Basic specified for Authentication and Credential not set."
+                                        Throw
+                                    }
                                 }
                                 $Script:LTServiceNetWebClient.DownloadFile($uninstaller,"$($env:windir)\temp\Agent_Uninstall.exe")
                                 If ((Test-Path "$($env:windir)\temp\Agent_Uninstall.exe") -and !((Get-Item "$($env:windir)\temp\Agent_Uninstall.exe" -EA 0).length/1KB -gt 80)) {
@@ -960,8 +1042,20 @@ Function Install-LTService{
 .PARAMETER SkipDotNet
     This will disable the error checking for the .NET 3.5 and .NET 2.0 frameworks during the install process.
 
-.PARAMETER Authorization
+.PARAMETER Authentication
     HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
+
+    Available Authentication Options:
+        None: This is the default option when Authentication isn't supplied; no explicit authentication is used.
+        Basic: Requires Credential. The credentials are sent in an RFC 7617 Basic Authentication header in the format of base64(user:password).
+        Bearer: Requires Token. Sends an RFC 6750 Authorization: Bearer header with the supplied token. This is an alias for OAuth
+        OAuth: Requires Token. Sends an RFC 6750 Authorization: Bearer header with the supplied token. This is an alias for Bearer
+
+.PARAMETER Credential
+    Username and password required by the server for basic authentication in order to download the agent installer or uninstaller.
+
+.PARAMETER Token
+    Bearer/OAuth token required by the server in order to download the agent installer or uninstaller.
 
 .PARAMETER Force
     This will disable some of the error checking on the install process.
@@ -975,7 +1069,7 @@ Function Install-LTService{
     This will install the LabTech agent using the provided Server URL, Password, and LocationID.
 
 .EXAMPLE
-    Redo-LTService -Server https://lt.domain.com -LocationID 42 -Authorization "Bearer SecretKeyHere"
+    Redo-LTService -Server https://lt.domain.com -LocationID 42 -Authentication 'Bearer' -Token 'TokenHere"
     This will install the LabTech agent using the server address in the registry using a bearer authorization header.
 
 .NOTES
@@ -1030,6 +1124,9 @@ Function Install-LTService{
     Update Date: 06/09/2020
     Purpose/Change: Add Authorization paramater to include an HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
 
+    Update Date: 06/13/2020
+    Purpose:Change: Enable both Bearer/OAuth and Basic authentication.
+
 .LINK
     http://labtechconsulting.com
 #>
@@ -1052,8 +1149,10 @@ Function Install-LTService{
         [string]$Rename,
         [switch]$Hide,
         [switch]$SkipDotNet,
-        [Parameter(ValueFromPipelineByPropertyName = $true)]
-        [string]$Authorization,
+        [ValidateSet('None', 'Basic', 'Bearer', 'OAuth')]
+        [string]$Authentication = 'None',
+        [string]$Token,
+        [pscredential]$Credential,
         [switch]$Force,
         [switch]$NoWait
     )
@@ -1184,8 +1283,26 @@ Function Install-LTService{
                         }#End If
                         $installerTest.KeepAlive=$False
                         $installerTest.ProtocolVersion = '1.0'
-                        if ($Authorization) {
-                            $installerTest.Headers['Authorization'] = $Authorization
+                        if ($Authentication -eq 'Bearer' -or $Authentication -eq 'OAuth') {
+                            if ($Token) {
+                                $installerTest.Headers['Authorization'] = "Bearer $Token"
+                                Write-Verbose "Set Authorization to [$Authentication $Token]."
+                            }
+                            else {
+                                Write-Error "ERROR: Line $(LINENUM): Bearer or OAuth specified for Authentication and Token not set."
+                                Throw
+                            }
+                        }
+                        elseif ($Authentication -eq 'Basic') {
+                            if ($Credential) {
+                                $Base64Credential = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Credential.Username + ":" + $Credential.GetNetworkCredential().Password));
+                                $installerTest.Headers['Authorization']= "Basic $Base64Credential"
+                                Write-Verbose "Set Authorization to [$Authentication $Base64Credential]."
+                            }
+                            else {
+                                Write-Error "ERROR: Line $(LINENUM): Basic specified for Authentication and Credential not set."
+                                Throw
+                            }
                         }
                         $installerResult = $installerTest.GetResponse()
                         $installerTest.Abort()
@@ -1195,8 +1312,23 @@ Function Install-LTService{
                         } Else {
                             If ( $PSCmdlet.ShouldProcess($installer, "DownloadFile") ) {
                                 Write-Debug "Line $(LINENUM): Downloading Agent_Install.msi from $installer"
-                                if ($Authorization) {
-                                    $Script:LTServiceNetWebClient.Headers['Authorization'] = $Authorization
+                                if ($Authentication -eq 'Bearer' -or $Authentication -eq 'OAuth') {
+                                    if ($Token) {
+                                        $Script:LTServiceNetWebClient.Headers['Authorization'] = "Bearer $Token"
+                                        Write-Verbose "Set Authorization to [$Authentication $Token]."
+                                    } else {
+                                        Write-Error "ERROR: Line $(LINENUM): Bearer or OAuth specified for Authentication and Token not set."
+                                        Throw
+                                    }
+                                } elseif ($Authentication -eq 'Basic') {
+                                    if ($Credential) {
+                                        $Base64Credential = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Credential.Username + ":" + $Credential.GetNetworkCredential().Password));
+                                        $Script:LTServiceNetWebClient.Headers['Authorization']= "Basic $Base64Credential"
+                                        Write-Verbose "Set Authorization to [$Authentication $Credential]."
+                                    } else {
+                                        Write-Error "ERROR: Line $(LINENUM): Basic specified for Authentication and Credential not set."
+                                        Throw
+                                    }
                                 }
                                 $Script:LTServiceNetWebClient.DownloadFile($installer,"$env:windir\temp\LabTech\Installer\Agent_Install.msi")
                                 If((Test-Path "$env:windir\temp\LabTech\Installer\Agent_Install.msi") -and  !((Get-Item "$env:windir\temp\LabTech\Installer\Agent_Install.msi" -EA 0).length/1KB -gt 1234)) {
@@ -1412,8 +1544,20 @@ Function Redo-LTService{
 .PARAMETER SkipDotNet
     This will disable the error checking for the .NET 3.5 and .NET 2.0 frameworks during the install process.
 
-.PARAMETER Authorization
+.PARAMETER Authentication
     HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
+
+    Available Authentication Options:
+        None: This is the default option when Authentication isn't supplied; no explicit authentication is used.
+        Basic: Requires Credential. The credentials are sent in an RFC 7617 Basic Authentication header in the format of base64(user:password).
+        Bearer: Requires Token. Sends an RFC 6750 Authorization: Bearer header with the supplied token. This is an alias for OAuth
+        OAuth: Requires Token. Sends an RFC 6750 Authorization: Bearer header with the supplied token. This is an alias for Bearer
+
+.PARAMETER Credential
+    Username and password required by the server for basic authentication in order to download the agent installer or uninstaller.
+
+.PARAMETER Token
+    Bearer/OAuth token required by the server in order to download the agent installer or uninstaller.
 
 .PARAMETER Force
     This will force operation on an agent detected as a probe.
@@ -1427,7 +1571,7 @@ Function Redo-LTService{
     This will ReInstall the LabTech agent using the provided server URL to download the installation files.
 
 .EXAMPLE
-    Redo-LTService -Authorization "Bearer SecretKeyHere"
+    Redo-LTService -Authentication 'Bearer' -Token 'TokenHere'
     This will ReInstall the LabTech agent using the server address in the registry using a bearer authorization header.
 
 .NOTES
@@ -1460,6 +1604,10 @@ Function Redo-LTService{
 
     Update Date: 06/09/2020
     Purpose/Change: Add Authorization paramater to include an HTTP Header authorization required by the server in order to download the agent installer or uninstaller.
+
+    Update Date: 06/13/2020
+    Purpose:Change: Enable both Bearer/OAuth and Basic authentication.
+
 .LINK
     http://labtechconsulting.com
 #>
@@ -1482,7 +1630,10 @@ Function Redo-LTService{
         [string]$Rename,
         [switch]$SkipDotNet,
         [Parameter(ValueFromPipelineByPropertyName = $true)]
-        [string]$Authorization,
+        [ValidateSet('None', 'Basic', 'Bearer', 'OAuth')]
+        [string]$Authentication = 'None',
+        [string]$Token,
+        [pscredential]$Credential,
         [switch]$Force
     )
 
@@ -1560,7 +1711,26 @@ Function Redo-LTService{
         Write-Output "Reinstalling LabTech with the following information, -Server $($ServerList -join ',') $PasswordArg -LocationID $LocationID $RenameArg"
         Write-Verbose "Starting: Uninstall-LTService -Server $($ServerList -join ',')"
         Try{
-            Uninstall-LTService -Server $ServerList -ErrorAction Stop -Authorization:$Authorization -Force
+            if ($Authentication -eq 'Bearer' -or $Authentication -eq 'OAuth') {
+	            if ($Token) {
+                    Uninstall-LTService -Server $ServerList -ErrorAction Stop -Authentication $Authentication -Token $Token -Force
+                    Write-Verbose "Uninstalling Labtech Service with authorization [$Authentication $Token]."
+                } else {
+                    Write-Error "ERROR: Line $(LINENUM): Bearer or OAuth specified for Authentication and Token not set."
+                    Throw
+                }
+            } elseif ($Authentication -eq 'Basic') {
+                if ($Credential) {
+                    Uninstall-LTService -Server $ServerList -ErrorAction Stop -Authentication $Authentication -Credential $Credential -Force
+                    Write-Verbose "Uninstalling Labtech Service with authorization [$Authentication $Token]."
+                } else {
+                    Write-Error "ERROR: Line $(LINENUM): Basic specified for Authentication and Credential not set."
+                    Throw
+                }
+            } else {
+                Uninstall-LTService -Server $ServerList -ErrorAction Stop -Force
+                Write-Verbose "Uninstalling Labtech Service without authorization."
+            }
         }#End Try
 
         Catch{
@@ -1576,7 +1746,26 @@ Function Redo-LTService{
 
         Write-Verbose "Starting: Install-LTService -Server $($ServerList -join ',') $PasswordArg -LocationID $LocationID -Hide:`$$($Hide) $RenameArg"
         Try{
-            Install-LTService -Server $ServerList -ServerPassword $ServerPassword -LocationID $LocationID -Hide:$Hide -Rename $Rename -SkipDotNet:$SkipDotNet -Authorization:$Authorization -Force
+            if ($Authentication -eq 'Bearer' -or $Authentication -eq 'OAuth') {
+	            if ($Token) {
+                    Install-LTService -Server $ServerList -ServerPassword $ServerPassword -LocationID $LocationID -Hide:$Hide -Rename $Rename -SkipDotNet:$SkipDotNet -Authentication $Authentication -Token $Token -Force
+                    Write-Verbose "Uninstalling Labtech Service with authorization [$Authentication $Token]."
+                } else {
+                    Write-Error "ERROR: Line $(LINENUM): Bearer or OAuth specified for Authentication and Token not set."
+                    Throw
+                }
+            } elseif ($Authentication -eq 'Basic') {
+                if ($Credential) {
+                    Install-LTService -Server $ServerList -ServerPassword $ServerPassword -LocationID $LocationID -Hide:$Hide -Rename $Rename -SkipDotNet:$SkipDotNet -Authentication $Authentication -Credential $Credential -Force
+                    Write-Verbose "Uninstalling Labtech Service with authorization [$Authentication $Token]."
+                } else {
+                    Write-Error "ERROR: Line $(LINENUM): Basic specified for Authentication and Credential not set."
+                    Throw
+                }
+            } else {
+                Install-LTService -Server $ServerList -ServerPassword $ServerPassword -LocationID $LocationID -Hide:$Hide -Rename $Rename -SkipDotNet:$SkipDotNet -Force
+                Write-Verbose "Uninstalling Labtech Service without authorization."
+            }
         }#End Try
 
         Catch{
